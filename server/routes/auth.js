@@ -13,6 +13,15 @@ const generateToken = (userId) => {
   });
 };
 
+// Helper function to get IP address
+const getClientIP = (req) => {
+  return req.headers['x-forwarded-for'] || 
+         req.connection.remoteAddress || 
+         req.socket.remoteAddress ||
+         (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+         '0.0.0.0';
+};
+
 // @route   POST /api/auth/register
 // @desc    Register a new user
 // @access  Public
@@ -98,6 +107,21 @@ router.post('/register', [
       await user.save();
     }
 
+    // Track registration activity
+    const clientIP = getClientIP(req);
+    const userAgent = req.headers['user-agent'] || '';
+    
+    await user.addActivityLog(
+      'account_created',
+      { 
+        referralCode: referralCode || null,
+        signupBonus: referredBy ? 25 : 0
+      },
+      clientIP
+    );
+
+    await user.addLoginHistory(clientIP, userAgent);
+
     // Generate token
     const token = generateToken(user._id);
 
@@ -165,9 +189,19 @@ router.post('/login', [
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
+    // Track login activity
+    const clientIP = getClientIP(req);
+    const userAgent = req.headers['user-agent'] || '';
+    
+    await user.addActivityLog(
+      'user_login',
+      { 
+        loginMethod: login.includes('@') ? 'email' : (login.includes('+') ? 'phone' : 'username')
+      },
+      clientIP
+    );
+
+    await user.addLoginHistory(clientIP, userAgent);
 
     // Generate token
     const token = generateToken(user._id);

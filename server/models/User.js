@@ -56,6 +56,33 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Admin-configured payment details
+  adminPaymentConfig: {
+    upiId: {
+      type: String,
+      trim: true
+    },
+    qrCodeUrl: {
+      type: String,
+      trim: true
+    },
+    qrCodeData: {
+      type: String,
+      trim: true
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now
+    }
+  },
   totalDeposited: {
     type: Number,
     default: 0
@@ -91,7 +118,31 @@ const userSchema = new mongoose.Schema({
   avatar: {
     type: String,
     default: ''
-  }
+  },
+  // Activity tracking
+  loginHistory: [{
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    ipAddress: String,
+    userAgent: String,
+    location: String
+  }],
+  activityLog: [{
+    action: {
+      type: String,
+      required: true
+    },
+    details: {
+      type: mongoose.Schema.Types.Mixed
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    ipAddress: String
+  }]
 }, {
   timestamps: true
 });
@@ -129,6 +180,41 @@ userSchema.methods.updateBalance = function(amount, type) {
   } else if (type === 'subtract') {
     this.balance = Math.max(0, this.balance - amount);
   }
+  return this.save();
+};
+
+// Add activity log entry
+userSchema.methods.addActivityLog = function(action, details = {}, ipAddress = '') {
+  this.activityLog.push({
+    action,
+    details,
+    ipAddress,
+    timestamp: new Date()
+  });
+  
+  // Keep only last 100 activity entries to prevent unlimited growth
+  if (this.activityLog.length > 100) {
+    this.activityLog = this.activityLog.slice(-100);
+  }
+  
+  return this.save();
+};
+
+// Add login history entry
+userSchema.methods.addLoginHistory = function(ipAddress = '', userAgent = '', location = '') {
+  this.loginHistory.push({
+    timestamp: new Date(),
+    ipAddress,
+    userAgent,
+    location
+  });
+  
+  // Keep only last 50 login entries
+  if (this.loginHistory.length > 50) {
+    this.loginHistory = this.loginHistory.slice(-50);
+  }
+  
+  this.lastLogin = new Date();
   return this.save();
 };
 
